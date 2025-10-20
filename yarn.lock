@@ -1978,6 +1978,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@stabilitydao/stability@npm:=0.45.0":
+  version: 0.45.0
+  resolution: "@stabilitydao/stability@npm:0.45.0"
+  checksum: 10c0/ec3ff3791732bdc9662cbd718dc5103888b1bca11e80ee9a50186636bbe00817d0fd778c2e4a92c9c5a071ce21bc0669add03364adad345b95e60abb3dd5b6f3
+  languageName: node
+  linkType: hard
+
 "@swc/cli@npm:^0.6.0":
   version: 0.6.0
   resolution: "@swc/cli@npm:0.6.0"
@@ -3482,6 +3489,7 @@ __metadata:
     "@nestjs/platform-express": "npm:^11.0.1"
     "@nestjs/schematics": "npm:^11.0.0"
     "@nestjs/testing": "npm:^11.0.1"
+    "@stabilitydao/stability": "npm:=0.45.0"
     "@swc/cli": "npm:^0.6.0"
     "@swc/core": "npm:^1.10.7"
     "@types/express": "npm:^5.0.0"
@@ -3494,6 +3502,7 @@ __metadata:
     eslint-plugin-prettier: "npm:^5.2.2"
     globals: "npm:^16.0.0"
     jest: "npm:^29.7.0"
+    nestjs-command: "npm:^3.1.5"
     octokit: "npm:^5.0.3"
     prettier: "npm:^3.4.2"
     reflect-metadata: "npm:^0.2.2"
@@ -6180,6 +6189,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"lodash.compact@npm:^3.0.1":
+  version: 3.0.1
+  resolution: "lodash.compact@npm:3.0.1"
+  checksum: 10c0/9cc32065f1a9aa90bf3caa987fb7e00f8b90a49209e7f9f37c601e595f396a83ebe8f3328b2ef7f365cf822c9f21697527620c9c9c9734f107453b4c6c4dd810
+  languageName: node
+  linkType: hard
+
+"lodash.flattendeep@npm:^4.4.0":
+  version: 4.4.0
+  resolution: "lodash.flattendeep@npm:4.4.0"
+  checksum: 10c0/83cb80754b921fb4ed2c222b91a82b2524f3bdc60c3ae91e00688bd4bf1bcc28b8a2cc250e11fdc1b6da3a2de09e57008e13f15a209cafdd4f9163d047f97544
+  languageName: node
+  linkType: hard
+
 "lodash.memoize@npm:^4.1.2":
   version: 4.1.2
   resolution: "lodash.memoize@npm:4.1.2"
@@ -6592,6 +6615,22 @@ __metadata:
   version: 2.6.2
   resolution: "neo-async@npm:2.6.2"
   checksum: 10c0/c2f5a604a54a8ec5438a342e1f356dff4bc33ccccdb6dc668d94fe8e5eccfc9d2c2eea6064b0967a767ba63b33763f51ccf2cd2441b461a7322656c1f06b3f5d
+  languageName: node
+  linkType: hard
+
+"nestjs-command@npm:^3.1.5":
+  version: 3.1.5
+  resolution: "nestjs-command@npm:3.1.5"
+  dependencies:
+    lodash.compact: "npm:^3.0.1"
+    lodash.flattendeep: "npm:^4.4.0"
+  peerDependencies:
+    "@nestjs/common": ^6.0.0 || ^7.0.0 || ^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0
+    "@nestjs/core": ^6.0.0 || ^7.0.0 || ^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0
+    yargs: ^16.0.0 || ^17.0.0
+  bin:
+    nestjs-command: bin/cli
+  checksum: 10c0/998b5e138fb87657ff5e8cd0b3fd2ac593dffe5b77a1b2f512b8d529f1e17ff14db132b1dc49d762c0e73125554c9ccb96f447e7ac41f08b841803ff83ccf591
   languageName: node
   linkType: hard
 
