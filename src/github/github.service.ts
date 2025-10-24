@@ -5,11 +5,14 @@ import * as dotenv from 'dotenv';
 import { ConfigService } from '@nestjs/config';
 import * as builder from '@stabilitydao/stability/out/builder';
 import { IBuilderAgent } from '@stabilitydao/stability/out/builder';
+import { Issues } from './types/issue';
 
 dotenv.config();
 
 @Injectable()
 export class GithubService implements OnModuleInit {
+  public issues: Issues = {};
+
   private app: App;
   private message: string;
   private logger = new Logger();
@@ -33,7 +36,10 @@ export class GithubService implements OnModuleInit {
       }),
     });
 
-    this.message = fs.readFileSync('./message.md', 'utf8');
+    this.message = 'Good luck!';
+
+    await this.updateIssues();
+
     const { data } = await this.app.octokit.request('/app');
     this.logger.log(`Authenticated as '${data.name}'`);
   }
@@ -53,6 +59,32 @@ export class GithubService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Error posting comment: ${error.response?.data?.message || error}`,
+      );
+    }
+  }
+
+  async handleIssueOpened(payload: any) {
+    const { issue, repository } = payload;
+    this.logger.log(`Issue opened: #${issue.number}`);
+
+    try {
+      const repoKey = `${repository.owner.login}/${repository.name}`;
+      if (!this.issues[repoKey]) {
+        this.issues[repoKey] = [];
+      }
+      this.issues[repoKey].push({
+        id: issue.id,
+        url: issue.url,
+        labelsUrl: issue.labels_url,
+        repositoryUrl: issue.repository_url,
+      });
+
+      this.logger.log(
+        `📝 Added issue #${issue.number} to internal list for ${repoKey}`,
+      );
+    } catch (error: any) {
+      this.logger.error(
+        `Error posting issue comment: ${error.response?.data?.message || error}`,
       );
     }
   }
@@ -118,5 +150,25 @@ export class GithubService implements OnModuleInit {
     }
 
     this.logger.log('✅ All labels synced successfully!');
+  }
+
+  private async updateIssues() {
+    const repos = (builder.builder as IBuilderAgent).repo;
+
+    for (const repo of repos) {
+      const [owner, repoName] = repo.split('/');
+      const { data: issues } = await this.app.octokit.rest.issues.listForRepo({
+        owner,
+        repo: repoName,
+        per_page: 100,
+      });
+
+      this.issues[repo] = issues.map((i) => ({
+        id: i.id,
+        url: i.url,
+        labelsUrl: i.labels_url,
+        repositoryUrl: i.repository_url,
+      }));
+    }
   }
 }
