@@ -15,13 +15,15 @@ export class GithubService implements OnModuleInit {
 
   private app: App;
   private message: string;
-  private logger = new Logger();
+  private logger = new Logger(GithubService.name);
+  private installationId: number;
 
   constructor(private config: ConfigService) {}
 
   async onModuleInit() {
-    const appId = this.config.get('APP_ID');
-    const privateKey = this.config.get('PRIVATE_KEY');
+    const appId = this.config.getOrThrow<string>('APP_ID');
+    const privateKeyPath = this.config.getOrThrow<string>('PRIVATE_KEY_PATH');
+    const privateKey = fs.readFileSync(privateKeyPath, 'utf-8');
     const secret = this.config.get('WEBHOOK_SECRET');
     const enterprise = this.config.get('ENTERPRISE_HOSTNAME');
 
@@ -38,10 +40,45 @@ export class GithubService implements OnModuleInit {
 
     this.message = 'Good luck!';
 
-    await this.updateIssues();
+    // 🔍 Initialize installationId
+    await this.resolveInstallationId();
 
+    // 🗂 Update local issues cache
+    await this.updateIssues().catch((e) => this.logger.error(e));
+
+    // 🧩 Verify authentication
     const { data } = await this.app.octokit.request('/app');
-    this.logger.log(`Authenticated as '${data.name}'`);
+    this.logger.log(
+      `Authenticated as GitHub App '${data.name}' (id: ${data.id})`,
+    );
+  }
+
+  private async resolveInstallationId() {
+    const envInstallationId = this.config.get<number>('INSTALLATION_ID');
+    if (envInstallationId) {
+      this.installationId = envInstallationId;
+      this.logger.log(`Using installation ID from .env: ${envInstallationId}`);
+      return;
+    }
+
+    const { data: installations } =
+      await this.app.octokit.rest.apps.listInstallations();
+    if (!installations.length) {
+      throw new Error('❌ No installations found for this GitHub App.');
+    }
+
+    this.installationId = installations[0].id;
+    this.logger.log(`Detected installation ID: ${this.installationId}`);
+  }
+
+  /**
+   * Creates an Octokit instance for the installation
+   */
+  private async getOctokit() {
+    if (!this.installationId) {
+      await this.resolveInstallationId();
+    }
+    return this.app.getInstallationOctokit(this.installationId);
   }
 
   async handlePROpened(payload: any) {
@@ -56,7 +93,7 @@ export class GithubService implements OnModuleInit {
         issue_number: pull_request.number,
         body: this.message,
       });
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Error posting comment: ${error.response?.data?.message || error}`,
       );
@@ -104,8 +141,7 @@ export class GithubService implements OnModuleInit {
       Object.fromEntries(labels.map((l) => [l.name, l])),
     );
 
-    const octokit = this.app.octokit;
-
+    const octokit = await this.getOctokit();
     const agent = builder.builder as IBuilderAgent;
 
     for (const repo of agent.repo) {
@@ -154,10 +190,12 @@ export class GithubService implements OnModuleInit {
 
   private async updateIssues() {
     const repos = (builder.builder as IBuilderAgent).repo;
+    const octokit = await this.getOctokit();
 
     for (const repo of repos) {
       const [owner, repoName] = repo.split('/');
-      const { data: issues } = await this.app.octokit.rest.issues.listForRepo({
+      this.logger.log(`📥 Fetching issues for ${repo}...`);
+      const { data: issues } = await octokit.rest.issues.listForRepo({
         owner,
         repo: repoName,
         per_page: 100,
