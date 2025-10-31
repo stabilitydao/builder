@@ -158,6 +158,8 @@ export class GithubService implements OnModuleInit {
         const existingLabel = existing.find((l) => l.name === label.name);
         const color = label.color.replace('#', '');
 
+        this.logger.log(`🔍 Checking ${label.name}`);
+
         if (!existingLabel) {
           this.logger.log(`➕ Creating ${label.name}`);
           await octokit.rest.issues.createLabel({
