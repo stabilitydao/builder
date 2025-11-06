@@ -1,8 +1,3 @@
-export type Issue = {
-  id: number;
-  url: string;
-  repositoryUrl: string;
-  labelsUrl: string;
-};
+import { IIssue } from '@stabilitydao/stability/out/builder';
 
-export type Issues = { [repository: string]: Issue[] };
+export type Issues = { [repository: string]: IIssue[] };
