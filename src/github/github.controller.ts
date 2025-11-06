@@ -21,4 +21,9 @@ export class GithubController {
   async getIssues() {
     return this.github.issues;
   }
+
+  @Get('builder-memory')
+  async getBuilderMemory() {
+    return this.github.getBuilderMemory();
+  }
 }

@@ -1,10 +1,13 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { App, Octokit } from 'octokit';
-import * as fs from 'fs';
-import * as dotenv from 'dotenv';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as builder from '@stabilitydao/stability/out/builder';
-import { IBuilderAgent } from '@stabilitydao/stability/out/builder';
+import {
+  IBuilderAgent,
+  IBuilderMemory,
+} from '@stabilitydao/stability/out/builder';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import { App, Octokit } from 'octokit';
 import { Issues } from './types/issue';
 
 dotenv.config();
@@ -109,12 +112,7 @@ export class GithubService implements OnModuleInit {
       if (!this.issues[repoKey]) {
         this.issues[repoKey] = [];
       }
-      this.issues[repoKey].push({
-        id: issue.id,
-        url: issue.url,
-        labelsUrl: issue.labels_url,
-        repositoryUrl: issue.repository_url,
-      });
+      this.issues[repoKey].push(this.issueToDTO(issue));
 
       this.logger.log(
         `📝 Added issue #${issue.number} to internal list for ${repoKey}`,
@@ -203,12 +201,78 @@ export class GithubService implements OnModuleInit {
         per_page: 100,
       });
 
-      this.issues[repo] = issues.map((i) => ({
-        id: i.id,
-        url: i.url,
-        labelsUrl: i.labels_url,
-        repositoryUrl: i.repository_url,
-      }));
+      this.issues[repo] = issues.map(this.issueToDTO);
     }
+  }
+
+  getBuilderMemory(): IBuilderMemory {
+    const agent = builder.builder as IBuilderAgent;
+
+    const openIssuesTotal: Record<string, number> = {};
+    for (const repo of Object.keys(this.issues)) {
+      openIssuesTotal[repo] = this.issues[repo].length;
+    }
+
+    const poolsMemory: Record<string, any[]> = {};
+    for (const pool of agent.pools) {
+      poolsMemory[pool.name] = [];
+
+      for (const repo of agent.repo) {
+        if (this.issues[repo]) {
+          poolsMemory[pool.name].push(...this.issues[repo]);
+        }
+      }
+    }
+
+    const conveyorsMemory: IBuilderMemory['conveyors'] = {};
+    for (const conveyor of agent.conveyors) {
+      conveyorsMemory[conveyor.name] = {};
+
+      for (const step of conveyor.steps) {
+        for (const issue of step.issues) {
+          if (!conveyorsMemory[conveyor.name][issue.repo]) {
+            conveyorsMemory[conveyor.name][issue.repo] = {};
+          }
+          if (!conveyorsMemory[conveyor.name][issue.repo][step.name]) {
+            conveyorsMemory[conveyor.name][issue.repo][step.name] = [];
+          }
+
+          const repoKey = issue.repo;
+          const stored = this.issues[repoKey] || [];
+
+          conveyorsMemory[conveyor.name][issue.repo][step.name].push(...stored);
+        }
+      }
+    }
+
+    return {
+      openIssues: {
+        total: openIssuesTotal,
+        pools: poolsMemory,
+      },
+      conveyors: conveyorsMemory,
+    };
+  }
+
+  private issueToDTO(
+    issue: Awaited<
+      ReturnType<typeof this.app.octokit.rest.issues.listForRepo>
+    >['data'][number],
+  ): builder.IIssue {
+    return {
+      id: issue.id,
+      title: issue.title,
+      assignees: {
+        username: issue.assignee?.login ?? '',
+        img: issue.assignee?.avatar_url ?? '',
+      },
+      labels: (issue.labels as any[]).map((l) => ({
+        name: l.name,
+        description: l.description,
+        color: l.color,
+      })),
+      body: issue.body ?? '',
+      repo: issue.repository?.name ?? '',
+    };
   }
 }
