@@ -21,6 +21,8 @@ export class GithubService implements OnModuleInit {
   private logger = new Logger(GithubService.name);
   private installationId: number;
 
+  private BUILDER_PRODUCT_LABEL = 'builder:PRODUCT';
+
   constructor(private config: ConfigService) {}
 
   async onModuleInit() {
@@ -112,7 +114,7 @@ export class GithubService implements OnModuleInit {
       if (!this.issues[repoKey]) {
         this.issues[repoKey] = [];
       }
-      this.issues[repoKey].push(this.issueToDTO(issue));
+      this.issues[repoKey].push(this.issueToDTO(issue, repoKey));
 
       this.logger.log(
         `📝 Added issue #${issue.number} to internal list for ${repoKey}`,
@@ -201,7 +203,7 @@ export class GithubService implements OnModuleInit {
         per_page: 100,
       });
 
-      this.issues[repo] = issues.map(this.issueToDTO);
+      this.issues[repo] = issues.map((i) => this.issueToDTO(i, repo));
     }
   }
 
@@ -218,9 +220,13 @@ export class GithubService implements OnModuleInit {
       poolsMemory[pool.name] = [];
 
       for (const repo of agent.repo) {
-        if (this.issues[repo]) {
-          poolsMemory[pool.name].push(...this.issues[repo]);
-        }
+        const issues = this.issues[repo] ?? [];
+
+        const filtered = issues.filter((issue) =>
+          issue.labels.some((l) => l.name === this.BUILDER_PRODUCT_LABEL),
+        );
+
+        poolsMemory[pool.name].push(...filtered);
       }
     }
 
@@ -258,6 +264,7 @@ export class GithubService implements OnModuleInit {
     issue: Awaited<
       ReturnType<typeof this.app.octokit.rest.issues.listForRepo>
     >['data'][number],
+    repo: string,
   ): builder.IIssue {
     return {
       id: issue.id,
@@ -272,7 +279,7 @@ export class GithubService implements OnModuleInit {
         color: l.color,
       })),
       body: issue.body ?? '',
-      repo: issue.repository?.name ?? '',
+      repo, 
     };
   }
 }
