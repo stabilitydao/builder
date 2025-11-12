@@ -11,9 +11,10 @@ export class GithubController {
       await this.github.handlePROpened(payload);
     }
 
-    if (payload.action === 'opened' && payload.issue) {
-      await this.github.handleIssueOpened(payload);
+    if (payload.issue) {
+      await this.github.handleIssue(payload);
     }
+
     return { ok: true };
   }
 
