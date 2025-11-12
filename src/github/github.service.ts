@@ -8,7 +8,7 @@ import {
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import { App, Octokit } from 'octokit';
-import { Issues } from './types/issue';
+import { FullIssue, Issues } from './types/issue';
 
 dotenv.config();
 
@@ -293,7 +293,7 @@ export class GithubService implements OnModuleInit {
       ReturnType<typeof this.app.octokit.rest.issues.listForRepo>
     >['data'][number],
     repo: string,
-  ): builder.IIssue {
+  ): FullIssue {
     return {
       id: issue.id,
       repoId: issue.number,
