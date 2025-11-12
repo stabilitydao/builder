@@ -248,11 +248,14 @@ export class GithubService implements OnModuleInit {
             if (!conveyorsMemory[conveyor.name][taskId]) {
               conveyorsMemory[conveyor.name][taskId] = {};
             }
-            if (!conveyorsMemory[conveyor.name][taskId][step.name]) {
-              conveyorsMemory[conveyor.name][taskId][step.name] = [];
+
+            const stepName = this.extractIssueStep(i.title);
+
+            if (!conveyorsMemory[conveyor.name][taskId][stepName]) {
+              conveyorsMemory[conveyor.name][taskId][stepName] = [];
             }
 
-            conveyorsMemory[conveyor.name][taskId][step.name].push(i);
+            conveyorsMemory[conveyor.name][taskId][stepName].push(i);
           });
         }
       }
@@ -265,6 +268,12 @@ export class GithubService implements OnModuleInit {
       },
       conveyors: conveyorsMemory,
     };
+  }
+
+  private extractIssueStep(title: string): string {
+    const step = title.split(': ');
+
+    return step[step.length - 1];
   }
 
   private extractTaskId(
