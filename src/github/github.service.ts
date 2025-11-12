@@ -103,27 +103,35 @@ export class GithubService implements OnModuleInit {
     }
   }
 
-  async handleIssueOpened(payload: any) {
-    const { issue, repository } = payload;
-    this.logger.log(`Issue opened: #${issue.number}`);
+  async handleIssue(payload: any) {
+    const { repository, action } = payload;
+    const repoKey = `${repository.owner.login}/${repository.name}`;
+
+    this.logger.log(
+      `🔁 Issue event: ${action} in ${repoKey} — refreshing issues...`,
+    );
 
     try {
-      const repoKey = `${repository.owner.login}/${repository.name}`;
-      if (!this.issues[repoKey]) {
-        this.issues[repoKey] = [];
-      }
-      this.issues[repoKey].push(this.issueToDTO(issue, repoKey));
+      const octokit = await this.getOctokit();
+      const [owner, repo] = [repository.owner.login, repository.name];
+
+      const { data: issues } = await octokit.rest.issues.listForRepo({
+        owner,
+        repo,
+        per_page: 100,
+      });
+
+      this.issues[repoKey] = issues.map((i) => this.issueToDTO(i, repoKey));
 
       this.logger.log(
-        `📝 Added issue #${issue.number} to internal list for ${repoKey}`,
+        `✅ Updated issues for ${repoKey} (${this.issues[repoKey].length} total)`,
       );
     } catch (error: any) {
       this.logger.error(
-        `Error posting issue comment: ${error.response?.data?.message || error}`,
+        `❌ Failed to refresh issues for ${repoKey}: ${error.response?.data?.message || error}`,
       );
     }
   }
-
   async syncLabels() {
     if (!builder) {
       this.logger.error('Builder agent not found');
