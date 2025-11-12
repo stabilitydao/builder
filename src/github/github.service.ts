@@ -21,8 +21,6 @@ export class GithubService implements OnModuleInit {
   private logger = new Logger(GithubService.name);
   private installationId: number;
 
-  private BUILDER_PRODUCT_LABEL = 'builder:PRODUCT';
-
   constructor(private config: ConfigService) {}
 
   async onModuleInit() {
@@ -219,15 +217,13 @@ export class GithubService implements OnModuleInit {
     for (const pool of agent.pools) {
       poolsMemory[pool.name] = [];
 
-      for (const repo of agent.repo) {
-        const issues = this.issues[repo] ?? [];
+      const issues = Object.values(this.issues).flat();
 
-        const filtered = issues.filter((issue) =>
-          issue.labels.some((l) => l.name === this.BUILDER_PRODUCT_LABEL),
-        );
+      const filtered = issues.filter((issue) =>
+        issue.labels.some((l) => l.name === pool.label.name),
+      );
 
-        poolsMemory[pool.name].push(...filtered);
-      }
+      poolsMemory[pool.name].push(...filtered);
     }
 
     const conveyorsMemory: IBuilderMemory['conveyors'] = {};
@@ -236,17 +232,28 @@ export class GithubService implements OnModuleInit {
 
       for (const step of conveyor.steps) {
         for (const issue of step.issues) {
-          if (!conveyorsMemory[conveyor.name][issue.repo]) {
-            conveyorsMemory[conveyor.name][issue.repo] = {};
-          }
-          if (!conveyorsMemory[conveyor.name][issue.repo][step.name]) {
-            conveyorsMemory[conveyor.name][issue.repo][step.name] = [];
-          }
-
           const repoKey = issue.repo;
+
           const stored = this.issues[repoKey] || [];
 
-          conveyorsMemory[conveyor.name][issue.repo][step.name].push(...stored);
+          stored.forEach((i) => {
+            const taskId = this.extractTaskId(
+              i.title,
+              conveyor.issueTitleTemplate,
+              conveyor.taskIdIs,
+            );
+
+            if (!taskId) return;
+
+            if (!conveyorsMemory[conveyor.name][taskId]) {
+              conveyorsMemory[conveyor.name][taskId] = {};
+            }
+            if (!conveyorsMemory[conveyor.name][taskId][step.name]) {
+              conveyorsMemory[conveyor.name][taskId][step.name] = [];
+            }
+
+            conveyorsMemory[conveyor.name][taskId][step.name].push(i);
+          });
         }
       }
     }
@@ -260,6 +267,27 @@ export class GithubService implements OnModuleInit {
     };
   }
 
+  private extractTaskId(
+    title: string,
+    template: string,
+    taskIdIs: string,
+  ): string | null {
+    const escapedTemplate = template.replace(/([.*+?^${}()|[\]\\])/g, '\\$1');
+
+    const regexPattern = escapedTemplate.replace(
+      /%([A-Z0-9_]+)%/g,
+      (_, varName) => `(?<${varName}>.+?)`,
+    );
+
+    const regex = new RegExp('^' + regexPattern + '$');
+    const match = title.match(regex);
+
+    if (!match || !match.groups) return null;
+
+    const variable = taskIdIs.replace(/%/g, '');
+    return match.groups[variable] ?? null;
+  }
+
   private issueToDTO(
     issue: Awaited<
       ReturnType<typeof this.app.octokit.rest.issues.listForRepo>
@@ -268,6 +296,7 @@ export class GithubService implements OnModuleInit {
   ): builder.IIssue {
     return {
       id: issue.id,
+      repoId: issue.number,
       title: issue.title,
       assignees: {
         username: issue.assignee?.login ?? '',
@@ -279,7 +308,7 @@ export class GithubService implements OnModuleInit {
         color: l.color,
       })),
       body: issue.body ?? '',
-      repo, 
+      repo,
     };
   }
 }
