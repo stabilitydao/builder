@@ -1,4 +1,4 @@
-import { IIssue } from '@stabilitydao/stability/out/builder';
+import { IIssue } from '@stabilitydao/stability/out/activity/builder';
 
 export type Issues = { [repository: string]: FullIssue[] };
 

@@ -1,10 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as builder from '@stabilitydao/stability/out/builder';
+import * as os from '@stabilitydao/stability/out/os';
 import {
-  IBuilderAgent,
-  IBuilderMemory,
-} from '@stabilitydao/stability/out/builder';
+  IBuildersMemory,
+  IBuilderActivity,
+} from '@stabilitydao/stability/out/activity/builder';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import { App, Octokit } from 'octokit';
@@ -133,149 +133,166 @@ export class GithubService implements OnModuleInit {
     }
   }
   async syncLabels() {
-    if (!builder) {
-      this.logger.error('Builder agent not found');
-      return;
-    }
+    const daos = os.daos;
+    for (const dao of daos) {
+      const builder = dao.builderActivity;
+      if (!builder) {
+        this.logger.error('Builder agent not found');
+        return;
+      }
 
-    const labels = [
-      ...builder.pools.map((p) => p.label),
-      ...builder.conveyors.map((c) => c.label),
-    ];
+      const labels = [
+        ...builder.pools.map((p) => p.label),
+        ...builder.conveyors.map((c) => c.label),
+      ];
 
-    const uniqueLabels = Object.values(
-      Object.fromEntries(labels.map((l) => [l.name, l])),
-    );
+      const uniqueLabels = Object.values(
+        Object.fromEntries(labels.map((l) => [l.name, l])),
+      );
 
-    const octokit = await this.getOctokit();
-    const agent = builder.builder as IBuilderAgent;
+      const octokit = await this.getOctokit();
 
-    for (const repo of agent.repo) {
-      const [owner, repoName] = repo.split('/');
-      this.logger.log(`🔄 Syncing labels for ${repo}...`);
+      for (const repo of builder.repo) {
+        const [owner, repoName] = repo.split('/');
+        this.logger.log(`🔄 Syncing labels for ${repo}...`);
 
-      const { data: existing } = await octokit.rest.issues.listLabelsForRepo({
-        owner,
-        repo: repoName,
-        per_page: 100,
-      });
+        const { data: existing } = await octokit.rest.issues.listLabelsForRepo({
+          owner,
+          repo: repoName,
+          per_page: 100,
+        });
 
-      for (const label of uniqueLabels) {
-        const existingLabel = existing.find((l) => l.name === label.name);
-        const color = label.color.replace('#', '');
+        for (const label of uniqueLabels) {
+          const existingLabel = existing.find((l) => l.name === label.name);
+          const color = label.color.replace('#', '');
 
-        this.logger.log(`🔍 Checking ${label.name}`);
+          this.logger.log(`🔍 Checking ${label.name}`);
 
-        if (!existingLabel) {
-          this.logger.log(`➕ Creating ${label.name}`);
-          await octokit.rest.issues.createLabel({
-            owner,
-            repo: repoName,
-            name: label.name,
-            color,
-            description: label.description,
-          });
-        } else if (
-          existingLabel.color !== color ||
-          existingLabel.description !== label.description
-        ) {
-          this.logger.log(`✏️ Updating ${label.name}`);
-          await octokit.rest.issues.updateLabel({
-            owner,
-            repo: repoName,
-            name: label.name,
-            color,
-            description: label.description,
-          });
-        } else {
-          this.logger.log(`✅ ${label.name} is up to date`);
+          if (!existingLabel) {
+            this.logger.log(`➕ Creating ${label.name}`);
+            await octokit.rest.issues.createLabel({
+              owner,
+              repo: repoName,
+              name: label.name,
+              color,
+              description: label.description,
+            });
+          } else if (
+            existingLabel.color !== color ||
+            existingLabel.description !== label.description
+          ) {
+            this.logger.log(`✏️ Updating ${label.name}`);
+            await octokit.rest.issues.updateLabel({
+              owner,
+              repo: repoName,
+              name: label.name,
+              color,
+              description: label.description,
+            });
+          } else {
+            this.logger.log(`✅ ${label.name} is up to date`);
+          }
         }
       }
+      this.logger.log('✅ All labels synced successfully!');
     }
-
-    this.logger.log('✅ All labels synced successfully!');
   }
 
   private async updateIssues() {
-    const repos = (builder.builder as IBuilderAgent).repo;
-    const octokit = await this.getOctokit();
+    const daos = os.daos;
+    for (const dao of daos) {
+      const builder = dao.builderActivity;
+      const repos = builder?.repo ?? [];
+      const octokit = await this.getOctokit();
 
-    for (const repo of repos) {
-      const [owner, repoName] = repo.split('/');
-      this.logger.log(`📥 Fetching issues for ${repo}...`);
-      const { data: issues } = await octokit.rest.issues.listForRepo({
-        owner,
-        repo: repoName,
-        per_page: 100,
-      });
+      for (const repo of repos) {
+        const [owner, repoName] = repo.split('/');
+        this.logger.log(`📥 Fetching issues for ${repo}...`);
+        const { data: issues } = await octokit.rest.issues.listForRepo({
+          owner,
+          repo: repoName,
+          per_page: 100,
+        });
 
-      this.issues[repo] = issues.map((i) => this.issueToDTO(i, repo));
+        this.issues[repo] = issues.map((i) => this.issueToDTO(i, repo));
+      }
     }
   }
 
-  getBuilderMemory(): IBuilderMemory {
-    const agent = builder.builder as IBuilderAgent;
+  getBuilderMemory(): IBuildersMemory {
+    const daos = os.daos;
+    const poolsMemory: IBuildersMemory = {};
 
-    const openIssuesTotal: Record<string, number> = {};
-    for (const repo of Object.keys(this.issues)) {
-      openIssuesTotal[repo] = this.issues[repo].length;
-    }
+    for (const dao of daos) {
+      poolsMemory[dao.tokenization.tokenSymbol] = {
+        conveyors: {},
+        openIssues: {
+          pools: {},
+          total: {},
+        },
+      };
 
-    const poolsMemory: Record<string, any[]> = {};
-    for (const pool of agent.pools) {
-      poolsMemory[pool.name] = [];
+      const agent = dao.builderActivity;
 
-      const issues = Object.values(this.issues).flat();
+      for (const repo of Object.keys(this.issues)) {
+        poolsMemory[dao.tokenization.tokenSymbol].openIssues.total[repo] =
+          this.issues[repo].length;
+      }
 
-      const filtered = issues.filter((issue) =>
-        issue.labels.some((l) => l.name === pool.label.name),
-      );
+      for (const pool of agent?.pools ?? []) {
+        poolsMemory[dao.tokenization.tokenSymbol].openIssues.pools[pool.name] =
+          [];
 
-      poolsMemory[pool.name].push(...filtered);
-    }
+        const issues = Object.values(this.issues).flat();
 
-    const conveyorsMemory: IBuilderMemory['conveyors'] = {};
-    for (const conveyor of agent.conveyors) {
-      conveyorsMemory[conveyor.name] = {};
+        const filtered = issues.filter((issue) =>
+          issue.labels.some((l) => l.name === pool.label.name),
+        );
 
-      for (const step of conveyor.steps) {
-        for (const issue of step.issues) {
-          const repoKey = issue.repo;
+        poolsMemory[dao.tokenization.tokenSymbol].openIssues.pools[
+          pool.name
+        ].push(...filtered);
+      }
 
-          const stored = this.issues[repoKey] || [];
+      const conveyorsMemory: IBuildersMemory[string]['conveyors'] = {};
+      for (const conveyor of agent?.conveyors ?? []) {
+        conveyorsMemory[conveyor.name] = {};
 
-          stored.forEach((i) => {
-            const taskId = this.extractTaskId(
-              i.title,
-              conveyor.issueTitleTemplate,
-              conveyor.taskIdIs,
-            );
+        for (const step of conveyor.steps) {
+          for (const issue of step.issues) {
+            const repoKey = issue.repo;
 
-            if (!taskId) return;
+            const stored = this.issues[repoKey] || [];
 
-            if (!conveyorsMemory[conveyor.name][taskId]) {
-              conveyorsMemory[conveyor.name][taskId] = {};
-            }
+            stored.forEach((i) => {
+              const taskId = this.extractTaskId(
+                i.title,
+                conveyor.issueTitleTemplate,
+                conveyor.taskIdIs,
+              );
 
-            const stepName = this.extractIssueStep(i.title);
+              if (!taskId) return;
 
-            if (!conveyorsMemory[conveyor.name][taskId][stepName]) {
-              conveyorsMemory[conveyor.name][taskId][stepName] = [];
-            }
+              if (!conveyorsMemory[conveyor.name][taskId]) {
+                conveyorsMemory[conveyor.name][taskId] = {};
+              }
 
-            conveyorsMemory[conveyor.name][taskId][stepName].push(i);
-          });
+              const stepName = this.extractIssueStep(i.title);
+
+              if (!conveyorsMemory[conveyor.name][taskId][stepName]) {
+                conveyorsMemory[conveyor.name][taskId][stepName] = [];
+              }
+
+              conveyorsMemory[conveyor.name][taskId][stepName].push(i);
+            });
+          }
         }
       }
+
+      poolsMemory[dao.tokenization.tokenSymbol].conveyors = conveyorsMemory;
     }
 
-    return {
-      openIssues: {
-        total: openIssuesTotal,
-        pools: poolsMemory,
-      },
-      conveyors: conveyorsMemory,
-    };
+    return poolsMemory;
   }
 
   private extractIssueStep(title: string): string {
