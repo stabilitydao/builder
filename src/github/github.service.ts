@@ -217,8 +217,6 @@ export class GithubService implements OnModuleInit {
         this.issues[repo] = issues.map((i) => this.issueToDTO(i, repo));
       }
     }
-
-    await this.updateIssues();
   }
 
   getBuilderMemory(): IBuildersMemory {
