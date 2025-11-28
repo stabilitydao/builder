@@ -138,7 +138,7 @@ export class GithubService implements OnModuleInit {
       const builder = dao.builderActivity;
       if (!builder) {
         this.logger.error('Builder agent not found');
-        return;
+        continue;
       }
 
       const labels = [
@@ -217,6 +217,8 @@ export class GithubService implements OnModuleInit {
         this.issues[repo] = issues.map((i) => this.issueToDTO(i, repo));
       }
     }
+
+    await this.updateIssues();
   }
 
   getBuilderMemory(): IBuildersMemory {
